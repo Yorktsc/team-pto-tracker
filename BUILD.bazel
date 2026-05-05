@@ -1,0 +1,9 @@
+load("@universe//bazel/rules/bazel_lint:bazel_lint.bzl", "bazel_lint_test")
+
+filegroup(
+    name = "app-under-dev",
+    srcs = glob(["**/*"]),  # keep
+    visibility = ["//apps/app-builder/images:__pkg__"],
+)
+
+bazel_lint_test(name = "bazel_lint_test")

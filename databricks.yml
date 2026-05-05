@@ -1,0 +1,32 @@
+bundle:
+  name: appkit-under-dev
+
+variables:
+  warehouse_id:
+    description: The ID of the warehouse to use
+
+resources:
+  apps:
+    app:
+      name: 'appkit-under-dev'
+      description: 'A Databricks App powered by AppKit'
+      source_code_path: ./
+
+      # Uncomment to enable on behalf of user API scopes. Available scopes: sql, dashboards.genie, files.files
+      # user_api_scopes:
+      #   - sql
+
+      # The resources which this app has access to.
+      resources:
+        - name: 'warehouse'
+          sql_warehouse:
+            id: ${var.warehouse_id}
+            permission: 'CAN_USE'
+
+targets:
+  default:
+    # mode: production
+    default: true
+
+    variables:
+      warehouse_id: 565afbdfa7ed5fe4

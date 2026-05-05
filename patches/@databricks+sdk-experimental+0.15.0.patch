@@ -1,0 +1,56 @@
+diff --git a/node_modules/@databricks/sdk-experimental/dist/api-client.js b/node_modules/@databricks/sdk-experimental/dist/api-client.js
+index 2f7b6de..70ac213 100644
+--- a/node_modules/@databricks/sdk-experimental/dist/api-client.js
++++ b/node_modules/@databricks/sdk-experimental/dist/api-client.js
+@@ -46,6 +46,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
+ };
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.ApiClient = void 0;
++const http = __importStar(require("node:http"));
+ const https = __importStar(require("node:https"));
+ const logging_1 = require("./logging");
+ const context_1 = require("./context");
+@@ -84,12 +85,23 @@ class ApiClient {
+     async getAgent() {
+         if (!this._agent) {
+             await this.config.ensureResolved();
+-            this._agent = new https.Agent({
+-                keepAlive: true,
+-                keepAliveMsecs: 15000,
+-                rejectUnauthorized: this.config.skipVerify === false,
+-                timeout: (this.config.httpTimeoutSeconds || 5) * 1000,
+-            });
++            const hostUrl = await this.config.getHost();
++            const isHttp = hostUrl.protocol === "http:";
++            if (isHttp) {
++                this._agent = new http.Agent({
++                    keepAlive: true,
++                    keepAliveMsecs: 15000,
++                    timeout: (this.config.httpTimeoutSeconds || 5) * 1000,
++                });
++            }
++            else {
++                this._agent = new https.Agent({
++                    keepAlive: true,
++                    keepAliveMsecs: 15000,
++                    rejectUnauthorized: this.config.skipVerify === false,
++                    timeout: (this.config.httpTimeoutSeconds || 5) * 1000,
++                });
++            }
+         }
+         return this._agent;
+     }
+diff --git a/node_modules/@databricks/sdk-experimental/dist/config/Config.js b/node_modules/@databricks/sdk-experimental/dist/config/Config.js
+index a77bb28..9ddde2b 100644
+--- a/node_modules/@databricks/sdk-experimental/dist/config/Config.js
++++ b/node_modules/@databricks/sdk-experimental/dist/config/Config.js
+@@ -118,7 +118,8 @@ class Config {
+         if (!host.startsWith("http")) {
+             host = `https://${host}`;
+         }
+-        this.host = `https://${new URL(host).hostname}`;
++        const parsed = new URL(host);
++        this.host = `${parsed.protocol}//${parsed.host}`;
+     }
+     async configureCredentialProvider() {
+         if (this.auth) {
