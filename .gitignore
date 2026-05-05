@@ -6,3 +6,7 @@ build/
 .env
 .databricks/
 .claude/selected-element.txt
+
+# Sandbox / editor environment artifacts
+.bootstrap/
+.bootstrap-done

@@ -1,27 +1,41 @@
 bundle:
-  name: appkit-under-dev
+  name: team-pto-tracker
 
 variables:
   warehouse_id:
-    description: The ID of the warehouse to use
+    description: The ID of the SQL warehouse the app uses for queries and writes
+  pto_table_full_name:
+    description: Fully-qualified name of the Delta table that stores PTO entries
+    default: workspace.default.pto_entries
 
 resources:
   apps:
     app:
-      name: 'appkit-under-dev'
-      description: 'A Databricks App powered by AppKit'
+      name: 'team-pto-tracker'
+      description: 'Team PTO tracker — log time off and visualize overlap'
       source_code_path: ./
 
       # Uncomment to enable on behalf of user API scopes. Available scopes: sql, dashboards.genie, files.files
       # user_api_scopes:
       #   - sql
 
-      # The resources which this app has access to.
+      # Resources this app has access to. The app's service principal
+      # is granted the listed permission on each resource at deploy time.
       resources:
         - name: 'warehouse'
           sql_warehouse:
             id: ${var.warehouse_id}
             permission: 'CAN_USE'
+        - name: 'pto_table_select'
+          uc_securable:
+            securable_full_name: ${var.pto_table_full_name}
+            securable_type: 'TABLE'
+            permission: 'SELECT'
+        - name: 'pto_table_modify'
+          uc_securable:
+            securable_full_name: ${var.pto_table_full_name}
+            securable_type: 'TABLE'
+            permission: 'MODIFY'
 
 targets:
   default:
@@ -30,3 +44,4 @@ targets:
 
     variables:
       warehouse_id: 565afbdfa7ed5fe4
+      pto_table_full_name: workspace.default.pto_entries
