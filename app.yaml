@@ -1,4 +1,13 @@
 command: ['npm', 'run', 'start']
 env:
+  # Warehouse ID for the SQL warehouse the app queries.
+  # Must match a `sql_warehouse` resource attached to the app
+  # with the same name (`warehouse`).
   - name: DATABRICKS_WAREHOUSE_ID
     valueFrom: warehouse
+
+  # Fully-qualified UC table name used for INSERT/DELETE statements.
+  # Must match a `uc_securable` (TABLE) resource attached to the app
+  # with the same name (`pto_table`).
+  - name: PTO_TABLE_FULL_NAME
+    valueFrom: pto_table

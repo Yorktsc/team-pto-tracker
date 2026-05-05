@@ -64,33 +64,106 @@ If `bundle validate` rejects the `uc_securable` resource in `databricks.yml` (so
 
 ## Flow B — Manual
 
+Manual deploy has **four phases**: create the app, attach resources, sync + deploy code, grant any remaining SQL permissions. Resource attach is the step people usually miss — it's what makes `valueFrom:` in `app.yaml` resolve to real values.
+
+### Resources this app needs
+
+| Resource | Kind | Name (in `app.yaml` `valueFrom`) | Permission granted to app SP | Why |
+|---|---|---|---|---|
+| SQL warehouse `565afbdfa7ed5fe4` | SQL warehouse | `warehouse` | `CAN_USE` | Runs all analytics queries and the server's INSERT/DELETE |
+| `workspace.default.pto_entries` | UC table | `pto_table` | `SELECT` | Read from the table (used by `valueFrom: pto_table` → `PTO_TABLE_FULL_NAME`; also grants read access) |
+| `workspace.default.pto_entries` | UC table | `pto_table_modify` (optional in manual) | `MODIFY` | Write (INSERT / DELETE) |
+
+Notes:
+- `uc_securable` resources hold **one** permission each, which is why `SELECT` and `MODIFY` are separate entries.
+- In the manual flow you can attach just the `pto_table` (SELECT) resource for the env-var wiring, and grant `MODIFY` with a plain `GRANT` SQL statement instead of attaching a second resource. Either approach works.
+
+### Phase 1 — Build + create the app
+
 ```bash
-# 1. Build
 npm ci
 npm run build
 
-# 2. Create the app (first time only)
 databricks apps create team-pto-tracker
+```
 
-# 3. Sync your working tree to a workspace path
+### Phase 2 — Attach resources (pick one)
+
+**Option A: UI (easiest).** Workspace → Compute → Apps → `team-pto-tracker` → **Resources** tab → **Add resource**:
+
+1. _Type:_ SQL warehouse → pick your warehouse → **Resource key:** `warehouse` → **Permission:** `Can use` → Save.
+2. _Type:_ Unity Catalog table → pick `workspace.default.pto_entries` → **Resource key:** `pto_table` → **Permission:** `SELECT` → Save.
+3. Repeat step 2 with **Permission:** `MODIFY` and **Resource key:** `pto_table_modify` (or skip this and use the GRANT statement in Phase 4).
+
+The resource *key* must match the `valueFrom:` in `app.yaml` exactly — `warehouse` and `pto_table`.
+
+**Option B: CLI.** `databricks apps update` accepts a resources array. The JSON shape matches the bundle schema:
+
+```bash
+databricks apps update team-pto-tracker --json '{
+  "resources": [
+    {
+      "name": "warehouse",
+      "sql_warehouse": {
+        "id": "565afbdfa7ed5fe4",
+        "permission": "CAN_USE"
+      }
+    },
+    {
+      "name": "pto_table",
+      "uc_securable": {
+        "securable_full_name": "workspace.default.pto_entries",
+        "securable_type": "TABLE",
+        "permission": "SELECT"
+      }
+    },
+    {
+      "name": "pto_table_modify",
+      "uc_securable": {
+        "securable_full_name": "workspace.default.pto_entries",
+        "securable_type": "TABLE",
+        "permission": "MODIFY"
+      }
+    }
+  ]
+}'
+```
+
+Verify:
+
+```bash
+databricks apps get team-pto-tracker --output json | jq '.resources'
+```
+
+### Phase 3 — Sync + deploy the code
+
+```bash
 USER_EMAIL=$(databricks current-user me --output json | jq -r .userName)
 WS_PATH="/Workspace/Users/${USER_EMAIL}/team-pto-tracker"
 databricks sync --full . "$WS_PATH"
-
-# 4. Deploy from that workspace path
 databricks apps deploy team-pto-tracker --source-code-path "$WS_PATH"
-
-# 5. Check status
 databricks apps get team-pto-tracker
 ```
 
 Iterative updates: re-run `npm run build` → `databricks sync . "$WS_PATH"` → `databricks apps deploy …`.
 
+### Phase 4 — Catalog/schema grants + any missing table perms
+
+Attaching a `uc_securable` resource grants the listed permission on the table but **does not** grant `USE CATALOG` / `USE SCHEMA` — those still need an explicit GRANT. See [Permissions](#permissions) below.
+
 ---
 
 ## Permissions
 
-Deployed apps run as a **service principal**, which is different from your user and different from the dev-environment SP. That SP needs Unity Catalog grants on the table and `CAN_USE` on the warehouse. DAB handles the warehouse grant via the declared resource; you'll need to handle the table grants either via the `uc_securable` resource block or manually.
+Deployed apps run as a **service principal** (different from your user and from the dev-environment SP). What each piece covers:
+
+| What's needed | Covered by |
+|---|---|
+| `CAN_USE` on the warehouse | DAB `resources` or manual attach of the `warehouse` resource |
+| `SELECT` on the PTO table | DAB `resources` or manual attach of the `pto_table` UC resource |
+| `MODIFY` on the PTO table | DAB `resources` or manual attach of the `pto_table_modify` UC resource **or** the GRANT below |
+| `USE CATALOG` on `workspace` | Manual GRANT — not expressible as an app resource |
+| `USE SCHEMA` on `workspace.default` | Manual GRANT — not expressible as an app resource |
 
 ### Find the app's service principal
 
@@ -106,14 +179,14 @@ Export it for the grant commands:
 APP_SP=$(databricks apps get team-pto-tracker --output json | jq -r '.service_principal_client_id')
 ```
 
-### Required grants (run once after the app is created)
+### Required grants (always run; manual deployers also need SELECT/MODIFY if they skipped the uc_securable attach)
 
 ```sql
--- Catalog + schema traversal
+-- Catalog + schema traversal (always required)
 GRANT USE CATALOG ON CATALOG workspace TO `${APP_SP}`;
 GRANT USE SCHEMA  ON SCHEMA  workspace.default TO `${APP_SP}`;
 
--- Read and write on the PTO table (the app does INSERT and DELETE)
+-- Only needed if you did NOT attach pto_table / pto_table_modify as resources
 GRANT SELECT, MODIFY ON TABLE workspace.default.pto_entries TO `${APP_SP}`;
 ```
 

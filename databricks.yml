@@ -26,7 +26,10 @@ resources:
           sql_warehouse:
             id: ${var.warehouse_id}
             permission: 'CAN_USE'
-        - name: 'pto_table_select'
+        # The app references the table via `valueFrom: pto_table` in app.yaml,
+        # so the SELECT grant uses that name. MODIFY is declared as a
+        # separate resource (uc_securable permits only one permission each).
+        - name: 'pto_table'
           uc_securable:
             securable_full_name: ${var.pto_table_full_name}
             securable_type: 'TABLE'

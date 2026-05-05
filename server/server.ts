@@ -2,7 +2,10 @@ import express from 'express';
 import { createApp, server, analytics, getExecutionContext, CacheManager } from '@databricks/appkit';
 import { randomUUID } from 'node:crypto';
 
-const TABLE = 'workspace.default.pto_entries';
+// Table used for INSERT/DELETE. The SQL files under config/queries/ reference
+// the same table directly (the analytics plugin doesn't template SQL), so if
+// you override this env var you must also update those query files.
+const TABLE = process.env.PTO_TABLE_FULL_NAME ?? 'workspace.default.pto_entries';
 
 // ISO date regex: YYYY-MM-DD
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
