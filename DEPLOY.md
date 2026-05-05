@@ -148,6 +148,8 @@ USER_EMAIL=$(databricks current-user me --output json | jq -r .userName)
 WS_PATH="/Workspace/Users/${USER_EMAIL}/team-pto-tracker"
 
 databricks sync --full \
+  --exclude 'node_modules/**' \
+  --exclude '.databricks/**' \
   --include 'dist/**' \
   --include 'client/dist/**' \
   . "$WS_PATH"
@@ -247,6 +249,7 @@ If the list/timeline/heatmap are empty in the deployed app but the table has row
 | `POST /api/pto` 500s | App SP missing `MODIFY` on table | Run `GRANT MODIFY ON TABLE ...` |
 | App starts but 502s | `npm run build` wasn't run, or `dist/` wasn't included in sync | Rebuild locally; re-run sync with `--include 'dist/**' --include 'client/dist/**'` |
 | Deploy: `error installing packages` / `Exit handler never called!` | npm ran out of memory on the Apps build container (too many packages to install) | Make sure `NODE_ENV=production` is set in `app.yaml` so devDependencies are skipped. Rebuild `dist/` locally so the container doesn't need the build toolchain |
+| Deploy: `ENOTEMPTY: directory not empty, rename '.../node_modules/<pkg>'` | Stale `node_modules/` left on the container from a previous failed/interrupted deploy | Stop + delete + re-create the app (UI or `databricks apps delete team-pto-tracker` then `create`), re-attach resources (Phase 2), redeploy. Also ensure `--exclude 'node_modules/**'` is on your `databricks sync` command so nothing local gets pushed up |
 | Deploy: `cannot find module ...` after install | `NODE_ENV=production` was set but a runtime dep is in `devDependencies` | Move that dep into `dependencies` in `package.json` |
 | Queries time out | Warehouse is stopped | Start the warehouse, or use Serverless |
 | `bundle validate` rejects `uc_securable` | CLI version doesn't support it | Remove `pto_table` from `databricks.yml` resources; grant manually |
