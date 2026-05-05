@@ -1,5 +1,12 @@
 command: ['npm', 'run', 'start']
 env:
+  # Production mode:
+  # - npm skips devDependencies at install time (Databricks Apps docs)
+  # - postinstall hook no-ops typegen (see package.json)
+  # - server.ts starts in production mode
+  - name: NODE_ENV
+    value: production
+
   # Warehouse ID for the SQL warehouse the app queries.
   # Must match a `sql_warehouse` resource attached to the app
   # with the same name (`warehouse`).

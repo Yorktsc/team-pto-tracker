@@ -137,15 +137,30 @@ databricks apps get team-pto-tracker --output json | jq '.resources'
 
 ### Phase 3 — Sync + deploy the code
 
+Important: the app's `app.yaml` runs `npm run start`, which consumes prebuilt artifacts from `dist/` and `client/dist/`. Those directories are gitignored (we don't want them in source control), so `databricks sync` skips them by default. Explicitly include them, and re-run `npm run build` whenever you change code:
+
 ```bash
+# Always build before syncing
+npm ci
+npm run build
+
 USER_EMAIL=$(databricks current-user me --output json | jq -r .userName)
 WS_PATH="/Workspace/Users/${USER_EMAIL}/team-pto-tracker"
-databricks sync --full . "$WS_PATH"
+
+databricks sync --full \
+  --include 'dist/**' \
+  --include 'client/dist/**' \
+  . "$WS_PATH"
+
 databricks apps deploy team-pto-tracker --source-code-path "$WS_PATH"
 databricks apps get team-pto-tracker
 ```
 
-Iterative updates: re-run `npm run build` → `databricks sync . "$WS_PATH"` → `databricks apps deploy …`.
+The deploy container will:
+1. Run `npm install` with `NODE_ENV=production` (set via `app.yaml`), which skips `devDependencies` and skips the `patch-package`/`typegen` postinstall step.
+2. Run `npm run start`, which serves the prebuilt artifacts you synced.
+
+Iterative updates: re-run `npm run build` → `databricks sync` → `databricks apps deploy …`.
 
 ### Phase 4 — Catalog/schema grants + any missing table perms
 
@@ -230,7 +245,9 @@ If the list/timeline/heatmap are empty in the deployed app but the table has row
 | `PERMISSION_DENIED` when loading entries | App SP missing `SELECT` on table | Run the `GRANT SELECT` command above |
 | `Table or view not found` | App SP missing `USE CATALOG`/`USE SCHEMA` | Run the two `GRANT USE ...` commands |
 | `POST /api/pto` 500s | App SP missing `MODIFY` on table | Run `GRANT MODIFY ON TABLE ...` |
-| App starts but 502s | `npm run build` wasn't run, or `dist/` missing | Rebuild locally, redeploy |
+| App starts but 502s | `npm run build` wasn't run, or `dist/` wasn't included in sync | Rebuild locally; re-run sync with `--include 'dist/**' --include 'client/dist/**'` |
+| Deploy: `error installing packages` / `Exit handler never called!` | npm ran out of memory on the Apps build container (too many packages to install) | Make sure `NODE_ENV=production` is set in `app.yaml` so devDependencies are skipped. Rebuild `dist/` locally so the container doesn't need the build toolchain |
+| Deploy: `cannot find module ...` after install | `NODE_ENV=production` was set but a runtime dep is in `devDependencies` | Move that dep into `dependencies` in `package.json` |
 | Queries time out | Warehouse is stopped | Start the warehouse, or use Serverless |
 | `bundle validate` rejects `uc_securable` | CLI version doesn't support it | Remove `pto_table` from `databricks.yml` resources; grant manually |
 

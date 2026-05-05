@@ -17,7 +17,7 @@
     "format:fix": "prettier --write .",
     "test": "vitest run",
     "clean": "rm -rf client/dist dist build node_modules",
-    "postinstall": "patch-package && npm run typegen",
+    "postinstall": "node ./scripts/postinstall.js",
     "prebuild": "npm run typegen",
     "predev": "npm run typegen",
     "typegen": "appkit generate-types",
